@@ -29,6 +29,10 @@ wget --load-cookies ~/cookies.txt "https://docs.google.com/uc?export=download&co
 wget --load-cookies ~/cookies.txt "https://docs.google.com/uc?export=download&confirm=$(wget --quiet --save-cookies ~/cookies.txt --keep-session-cookies --no-check-certificate 'https://docs.google.com/uc?export=download&id=1yim_nfaYOKD6jRns3YKMPcCmUYtrVYF0' -O- | sed -rn 's/.*confirm=([0-9A-Za-z_]+).*/\1\n/p')&id=1yim_nfaYOKD6jRns3YKMPcCmUYtrVYF0" -O recog.pth && rm -rf ~/cookies.txt
 ```
 
+### kocrnn_final.pth
+```
+wget --load-cookies ~/cookies.txt "https://docs.google.com/uc?export=download&confirm=$(wget --quiet --save-cookies ~/cookies.txt --keep-session-cookies --no-check-certificate 'https://docs.google.com/uc?export=download&id=1jp1PeFm6BhkZrZjBy9V_G4TXlffjgOqn' -O- | sed -rn 's/.*confirm=([0-9A-Za-z_]+).*/\1\n/p')&id=1jp1PeFm6BhkZrZjBy9V_G4TXlffjgOqn" -O kocrnn_final.pth && rm -rf ~/cookies.txt
+```
 
 #### trocr pretrained model donwload
 ###### doc
