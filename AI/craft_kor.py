@@ -1,5 +1,5 @@
 import argparse,sys
-
+import pickle
 import cv2
 from detection import imgproc, craft_utils
 from detection.craft import CRAFT
@@ -7,7 +7,7 @@ from torch.autograd import Variable
 from collections import OrderedDict
 from dataset_group import NaverDataset, TrocrDataset
 
-
+import re
 import string
 import torch
 import torch.backends.cudnn as cudnn
@@ -76,7 +76,6 @@ def command():
     parser.add_argument('--refiner_model', default='weights/craft_refiner_CTW1500.pth', type=str, help='pretrained refiner model')
 
     # naver recogntion
-    parser.add_argument('--image_folder', required=True, help='path to image_folder which contains text images')
     parser.add_argument('--workers', type=int, help='number of data loading workers', default=4)
     parser.add_argument('--batch_size', type=int, default=192, help='input batch size')
     parser.add_argument('--saved_model', default='downloads/premodels/pretrained_ocr.pth', help="path to saved_model to evaluation")
@@ -91,16 +90,18 @@ def command():
     parser.add_argument('--sensitive', action='store_true', help='for sensitive character mode')
     parser.add_argument('--PAD', action='store_true', help='whether to keep ratio then pad for image resize')
     """ Model Architecture """
-    parser.add_argument('--Transformation', type=str, required=True, help='Transformation stage. None|TPS')
-    parser.add_argument('--FeatureExtraction', type=str, required=True, help='FeatureExtraction stage. VGG|RCNN|ResNet')
-    parser.add_argument('--SequenceModeling', type=str, required=True, help='SequenceModeling stage. None|BiLSTM')
-    parser.add_argument('--Prediction', type=str, required=True, help='Prediction stage. CTC|Attn')
+    parser.add_argument('--Transformation', type=str, default='TPS', help='Transformation stage. None|TPS')
+    parser.add_argument('--FeatureExtraction', type=str, default='ResNet', help='FeatureExtraction stage. VGG|RCNN|ResNet')
+    parser.add_argument('--SequenceModeling', type=str, default='BiLSTM', help='SequenceModeling stage. None|BiLSTM')
+    parser.add_argument('--Prediction', type=str, default='CTC', help='Prediction stage. CTC|Attn')
     parser.add_argument('--num_fiducial', type=int, default=20, help='number of fiducial points of TPS-STN')
     parser.add_argument('--input_channel', type=int, default=1, help='the number of input channel of Feature extractor')
     parser.add_argument('--output_channel', type=int, default=512,
                         help='the number of output channel of Feature extractor')
     parser.add_argument('--hidden_size', type=int, default=256, help='the size of the LSTM hidden state')
-
+    parser.add_argument('--detect_text',required=True, help='htr or ocr')
+    parser.add_argument('--recog_name',help='naver or trocr')
+    parser.add_argument('--recog_model',help='naver path')
     args = parser.parse_args()
     if args.sensitive:
         args.character = string.printable[:-6]  # same with ASTER setting (use 94 char).
@@ -260,24 +261,61 @@ def naver_recog(args,data,model,converter,img_size):
 
 def trocr_recog(dataset,recog_net,img_size,tr_task):
     one_image_res = []
-    for tr_sample,rect in dataset:
-        generated_ids = recog_net.generate(tr_sample)
-        text = dataset.processor.decode(generated_ids, skip_special_tokens=True)
-        total_x = img_size[1]
-        total_y = img_size[0]
-        x, y, w, h = rect
-        width = w / total_x
-        height = h / total_y
-        left = x / total_x
-        top = y / total_y
-        res_dict = dict()
-        res_dict['text'] = text
-        res_dict['coordinate'] = {"left":left,"top":top}
-        res_dict['size'] = {"width":width,"height":height}
+    total_x = img_size[1]
+    total_y = img_size[0]
+    start_tok = '[CLS]'
+    end_tok = '[SEP]'
+    data_loader = torch.utils.data.DataLoader(
+        dataset, batch_size=args.batch_size,
+        shuffle=False,
+        num_workers=int(args.workers), pin_memory=True)
+    recog_net.eval()
+    with torch.no_grad():
+#         for tr_sample,rect in dataset:
+#             generated_ids = recog_net.generate(tr_sample)
+#             text = dataset.processor.decode(generated_ids, skip_special_tokens=True)
+#             total_x = img_size[1]
+#             total_y = img_size[0]
+#             x, y, w, h = rect
+#             width = w / total_x
+#             height = h / total_y
+#             left = x / total_x
+#             top = y / total_y
+#             res_dict = dict()
+#             res_dict['text'] = text
+#             res_dict['coordinate'] = {"left":left,"top":top}
+#             res_dict['size'] = {"width":width,"height":height}
 
-        
-        res_dict['accuracy'] = 1.0
-        one_image_res.append(res_dict)
+
+#             res_dict['accuracy'] = 1.0
+#             one_image_res.append(res_dict)
+        for tr_sample,rect in data_loader:
+            generated_ids = recog_net.generate(tr_sample,max_length=5)
+            text = dataset.processor.batch_decode(generated_ids)
+            for t in text:
+                temp = re.sub(start_tok,"",t)
+                if len(temp) == 0:
+                    t = ''
+                else:
+                    if temp.startswith('[SEP]'):
+                        end_idx = temp[len(start_tok):].find(end_tok)
+                        if end_idx == 0:
+                            t = ''
+                        else:
+                            t = temp[len(start_tok):end_idx]
+                x, y, w, h = rect
+                width = w / total_x
+                height = h / total_y
+                left = x / total_x
+                top = y / total_y
+                res_dict = dict()
+                res_dict['text'] = t
+                res_dict['coordinate'] = {"left":left,"top":top}
+                res_dict['size'] = {"width":width,"height":height}
+
+
+                res_dict['accuracy'] = 1.0
+            one_image_res.append(res_dict)
     return one_image_res
 
 
@@ -286,7 +324,10 @@ if __name__ =="__main__":
     image_list, _, _ = get_files(args.test_folder)
     detect_net, refine_net, args = init_detect_model(args)
     if args.recog_name == 'trocr':
-        from kotrocr_model import kor_model, kor_processor
+        with open('./kor_processor.pkl','rb') as f:
+          kor_processor = pickle.load(f)
+        with open('./kor_htr_model.pkl','rb') as f:
+          kor_model = pickle.load(f)
     elif args.recog_name == 'naver':
         recog_net,args,converter = init_recog_model(args)
     
