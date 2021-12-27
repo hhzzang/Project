@@ -77,7 +77,4 @@ cd ..
 cd ..
 
 img_path, '--cuda','n','--recog_name','trocr','--recog_model','./models/trhtr.pt','--detect_model','./models/craft.pth
-
-
 ```
-
