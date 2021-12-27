@@ -32,6 +32,7 @@
 * [회의록](https://gummycode.notion.site/c1c02f36aac743d097818bf8cbe08e24)
 
 * [UI 시나리오](https://github.com/PGHJteam/Project/files/7726589/6._UI.Scenario.pdf)
+* [산출물 폴더](https://drive.google.com/drive/folders/1yB0oPecds8whyXtLDhrDebdHJj52clXt?usp=sharing)
 
 <br>
 
